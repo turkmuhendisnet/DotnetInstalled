@@ -1,0 +1,326 @@
+unit uDotNetInstaller;
+
+interface
+uses
+  SysUtils,
+  Classes,
+  Windows,
+  Dialogs,
+  Forms;
+
+
+const
+  cFileName   : String = 'Dn48.exe';
+  cSourceUrl  : string = 'http://www.solmaz.com.tr/download/ndp48/';
+
+type
+  TDotNetFrameWorkVersion = (dnV1, dnV2, dnV3, dnV35, dnV4);
+  TDotNetFrameWorkVersions = set of TDotNetFrameWorkVersion;
+
+  TDotnetVersionFinder = class
+  public
+    class function FindDotNetVersion : TDotNetFrameWorkVersions;
+    class function GetPathDotnet4 : String;
+  end;
+
+  TDotNet = class
+  private
+    class function DownloadFile : Boolean;
+    class function ExecAndWait(const AProgram, AParameters: String) : Boolean;
+  public
+    class function IsInstalled : Boolean;
+    class function Install : Boolean;
+    class function RegisterDLL(const AFileName : String) : Boolean;
+  end;
+
+implementation
+uses
+  Registry,
+  IdHttp;
+
+{ TDotNet }
+
+class function TDotNet.ExecAndWait(const AProgram, AParameters: String) : Boolean;
+var
+  AStartupInfo  : TStartupInfo;
+  AProcessInfo  : TProcessInformation;
+
+  CommandLine   : String;
+
+  ExitCode      : Cardinal;
+  WaitResult    : Cardinal;
+begin
+  Result := false;
+
+  FillChar(AStartupInfo, SizeOf(TStartupInfo), 0);
+  FillChar(AProcessInfo, SizeOf(TProcessInformation), 0);
+  AStartupInfo.cb := SizeOf(TStartupInfo);
+
+  CommandLine := AProgram  + AParameters;
+  //CommandLine := 'C:\Windows\Microsoft.NET\Framework\v4.0.30319\RegAsm.exe X:\ANT\AntGunRapGonNET\AntGunRapGonNET\bin\Debug\AntGunRapGonNET.dll /codebase';
+  try
+    if not CreateProcess(nil, PChar(CommandLine), nil, nil, false, NORMAL_PRIORITY_CLASS, nil, nil, AStartupInfo, AProcessInfo) then
+      raise Exception.Create(AProgram + ' başlatılamadı.!');
+
+    // Bitmesini bekleyelim
+    while true do
+    begin
+      WaitResult := WaitForSingleObject(AProcessInfo.hProcess, 100);
+
+      if WaitResult = WAIT_TIMEOUT
+      then
+        Application.ProcessMessages
+      else
+        Break;
+    end;
+
+    Application.ProcessMessages;
+
+    ExitCode := 0;
+    GetExitCodeProcess(AProcessInfo.hProcess, ExitCode);
+
+    case ExitCode of
+      $0 : Result := true;
+    end;
+  finally
+    CloseHandle(AProcessInfo.hProcess);
+    CloseHandle(AProcessInfo.hThread);
+  end;
+end;
+
+class function TDotNet.DownloadFile: Boolean;
+var
+  AHttp         : TIdHttp;
+  ASource       : TMemoryStream;
+  AUrl          : String;
+  ATarget       : TFileStream;
+  AFileName     : String;
+begin
+  Result := false;
+
+  AFileName := cFileName;
+
+  // download
+
+  AHttp := TIdHttp.Create(nil);
+  ASource := TMemoryStream.Create;
+  ATarget := nil;
+
+  try
+    try
+      AUrl := cSourceUrl + AFileName;
+
+      AHttp.Get(AUrl, ASource);
+      ASource.Position := 0;
+
+      ATarget := TFileStream.Create(AFileName, fmCreate or fmShareDenyNone);
+
+      ATarget.CopyFrom(ASource, ASource.Size);
+
+      Result := true;
+    except on E: Exception do
+      begin
+        if Assigned(AHttp) then
+          FreeAndNil(AHttp);
+
+        if Assigned(ASource) then
+          FreeAndNil(ASource);
+
+        if Assigned(ATarget) then
+          FreeAndNil(ATarget);
+      end;
+    end; // try..except
+  finally
+    if Assigned(AHttp) then
+      FreeAndNil(Ahttp);
+
+    if Assigned(ASource) then
+      FreeAndNil(ASource);
+
+    if Assigned(ATarget) then
+      FreeAndNil(ATarget);
+  end; // try..finally
+end;
+
+class function TDotNet.Install: Boolean;
+begin
+  Result := false;
+
+  if not (dnV4 in TDotnetVersionFinder.FindDotNetVersion) then
+  begin
+    // .Net 4. bulunamadı
+
+    if not FileExists(cFileName) then
+      if not DownloadFile then Exit;
+
+    //.Net 4.0 kurulum işlemi başladı
+    //ExecAndWait(ExtractFilePath(Application.ExeName) + '\' + cFileName, ' /passive /norestart');
+    Result := ExecAndWait(ExtractFilePath(Application.ExeName) + '\' + cFileName, ' /q /norestart');
+    //.Net 4.0 kurulum işlemi tamamlandı
+
+    //Result := true;
+  end // if not (dnV4 in TDotnetVersionFinder.FindDotNetVersion) then
+  else
+    Result := true;
+end;
+
+class function TDotNet.IsInstalled: Boolean;
+var
+  InstalledVersions : TDotNetFrameWorkVersions;
+begin
+  InstalledVersions := TDotnetVersionFinder.FindDotNetVersion;
+
+  Result := (dnV4 in InstalledVersions);
+end;
+
+class function TDotNet.RegisterDLL(const AFileName: String): Boolean;
+var
+  SystemPath : array[0..1023] of Char;
+  ARegAsmFile: String;
+begin
+  Result := false;
+
+  GetSystemDirectory(SystemPath, 1024);
+
+  ARegAsmFile := SystemPath + '\regasm.exe';
+
+  // Sistem klasöründe regasm bulunamadı, o halde başka yerde arayalım.
+  if not FileExists(ARegAsmFile) then
+    ARegAsmFile := TDotnetVersionFinder.GetPathDotnet4 + 'regasm.exe';
+
+  if FileExists(ARegAsmFile) then
+    Result := ExecAndWait(ARegAsmFile,  ' "' + AFileName + '" /codebase');
+end;
+
+{ TDotnetVersionFinder }
+class function TDotnetVersionFinder.FindDotNetVersion: TDotNetFrameWorkVersions;
+var
+  Reg : TRegistry;
+  Key,
+  Key2: String;
+begin
+  Result := [];
+
+  Reg := TRegistry.Create(KEY_QUERY_VALUE or KEY_READ);
+  Reg.RootKey := HKEY_LOCAL_MACHINE;
+
+  try
+    Key := 'Software\Microsoft\.NETFramework\Policy\v1.0\3705';
+    if Reg.KeyExists(Key) then Result := Result + [dnV1];
+
+    if Result = [] then
+    begin
+      Key := 'Software\Microsoft\NET Framework Setup\NDP\v1.1.4322';
+
+      if Reg.KeyExists(Key) then
+      begin
+        if Reg.OpenKey(Key, false) then
+        begin
+          if Reg.ValueExists('Install') then
+            if Reg.ReadInteger('Install') = 1 then Result := Result + [dnV1];
+
+          Reg.CloseKey;
+        end; // if Reg.OpenKey(Key, false) then
+      end; // if Reg.KeyExists(Key) then
+    end;
+
+    Key := 'Software\Microsoft\NET Framework Setup\NDP\v2.0.50727';
+
+    if Reg.KeyExists(Key) then
+    begin
+      if Reg.OpenKey(Key, false) then
+      begin
+        if Reg.ValueExists('Install') then
+          if Reg.ReadInteger('Install') = 1 then Result := Result + [dnV2];
+
+        Reg.CloseKey;
+      end; // if Reg.OpenKey(Key, false) then
+    end; // if Reg.KeyExists(Key) then
+
+    Key := 'Software\Microsoft\NET Framework Setup\NDP\v3.0\Setup';
+
+    if Reg.KeyExists(Key) then
+    begin
+      if Reg.OpenKey(Key, false) then
+      begin
+        if Reg.ValueExists('InstallSuccess') then
+          if Reg.ReadInteger('InstallSuccess') = 1 then Result := Result + [dnV3];
+
+        Reg.CloseKey;
+      end; // if Reg.OpenKey(Key, false) then
+    end; // if Reg.KeyExists(Key) then
+
+    Key := 'Software\Microsoft\NET Framework Setup\NDP\v3.5';
+
+    if Reg.KeyExists(Key) then
+    begin
+      if Reg.OpenKey(Key, false) then
+      begin
+        if Reg.ValueExists('Install') then
+          if Reg.ReadInteger('Install') = 1 then Result := Result + [dnV35];
+
+        Reg.CloseKey;
+      end; // if Reg.OpenKey(Key, false) then
+    end; // if Reg.KeyExists(Key) then
+
+    Key := 'Software\Microsoft\NET Framework Setup\NDP\v4\Client';
+    Key2:= 'Software\Microsoft\NET Framework Setup\NDP\v4\Full';
+    if Reg.KeyExists(Key) then
+      if Reg.KeyExists(Key2) then
+      begin
+        if Reg.OpenKey(Key, false) then
+        begin
+          if Reg.ValueExists('Install') then
+          begin
+            if Reg.ReadInteger('Install') = 1 then
+            begin
+              Reg.CloseKey;
+
+              if Reg.OpenKey(Key2, false) then
+              begin
+                if Reg.ValueExists('Install') then
+                  if Reg.ReadInteger('Install') = 1 then Result := Result + [dnV4];
+
+                Reg.CloseKey;
+              end;
+            end
+            else
+              Reg.CloseKey;
+          end
+          else
+            Reg.CloseKey;
+        end; // if Reg.OpenKey(Key, false) then
+      end; // if Reg.KeyExists(Key2) then
+  finally
+    Reg.Free;
+  end;
+end;
+
+class function TDotnetVersionFinder.GetPathDotnet4: String;
+var
+  Reg : TRegistry;
+  Key : String;
+begin
+  Result := '';
+
+  Reg := TRegistry.Create(KEY_QUERY_VALUE or KEY_READ);
+  Reg.RootKey := HKEY_LOCAL_MACHINE;
+
+  try
+    Key := 'Software\Microsoft\NET Framework Setup\NDP\v4\Client';
+
+    if Reg.KeyExists(Key) then
+      if Reg.OpenKey(Key, false) then
+      begin
+        if Reg.ValueExists('InstallPath') then
+            Result := Reg.ReadString('InstallPath');
+
+        Reg.CloseKey;
+      end;
+  finally
+    if Assigned(Reg) then
+      FreeAndNil(Reg);
+  end; // try..finally
+end;
+
+end.
