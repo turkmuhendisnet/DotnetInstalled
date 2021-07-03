@@ -10,8 +10,8 @@ uses
 
 
 const
-  cFileName   : String = 'Dn48.exe';
-  cSourceUrl  : string = 'http://www.solmaz.com.tr/download/ndp48/';
+  cFileName   : String = 'Your.exe';//Write the name of the exe
+  cSourceUrl  : string = 'http://www.YourUrl.com';//write the url to download the file
 
 type
   TDotNetFrameWorkVersion = (dnV1, dnV2, dnV3, dnV35, dnV4);
