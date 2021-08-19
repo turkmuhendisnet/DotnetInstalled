@@ -1,5 +1,5 @@
 # DotnetInstalled
-checks whether the .net 4.8 version is installed on the user's computer.
+Checks whether the .net 4.8 version is installed on the user's computer.
 
 ## Goal
 If a dll written in C# is used by another project written in object pascal, it is used to install and restore the .net dll on the user's computer.
