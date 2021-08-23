@@ -2,38 +2,9 @@
 Checks whether the .net 4.8 version is installed on the user's computer.
 
 ## Goal
-If a dll written in C# is used by another project written in object pascal, it is used to install and restore the .net dll on the user's computer.
+It allows the mails from the addresses specified in the mailbox to be displayed in a windows form application and to send confirmation mails to these mails.
 
-```javascript
-function FindDotNetVersion : TDotNetFrameWorkVersions;
-```
-Finds the .net version installed on the computer.
-
-```javascript
-function function IsInstalled : Boolean;
-```
-It checks if IsInstalled is installed with the function.
-
-```javascript
-function Install : Boolean;
-```
-.net loads
-
-```javascript
-function DownloadFile : Boolean;
-```
-.net is dowlanded.
-
-
-```javascript
-function RegisterDLL(const AFileName : String) : Boolean;
-```
-used to register dll
-
-
-## Used Technologies
-- Delphi 7
-- object pascal
+![Anasayfa Resmi](https://github.com/turkmuhendisnet/NotBankasi.com/blob/master/NotBankas%C4%B1%20Anasayfa%20g%C3%B6r%C3%BCn%C3%BCm%20.jpg)
 
 
 
